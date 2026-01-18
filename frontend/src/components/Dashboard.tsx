@@ -18,7 +18,8 @@ import {
   Chip,
 } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/Download';
-import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
+import 'leaflet/dist/leaflet.css';
+import SiteMap from './SiteMap';
 import { AnalysisResponse } from '../types';
 
 interface DashboardProps {
@@ -40,13 +41,14 @@ const Dashboard = ({ analysisResult }: DashboardProps) => {
 
   const { summary, preview, total_rows, messages } = analysisResult;
 
-  // Prepare data for scatter plot
-  const scatterData = preview.map((row) => ({
-    lon: parseFloat(row.lon) || 0,
-    lat: parseFloat(row.lat) || 0,
-    area_class: row.area_class || 'Unknown',
-    density: parseFloat(row.density) || 0,
-  }));
+  // Prepare data for map
+  const mapData = preview.map((row) => ({
+    site_id: row.site_id || undefined,
+    lon: parseFloat(String(row.lon)) || 0,
+    lat: parseFloat(String(row.lat)) || 0,
+    area_class: String(row.area_class || 'Unknown'),
+    density: parseFloat(String(row.density)) || 0,
+  })).filter(site => !isNaN(site.lat) && !isNaN(site.lon));
 
   const handleDownload = async () => {
     // Note: In a real implementation, we'd need to store the file and params
@@ -181,82 +183,24 @@ const Dashboard = ({ analysisResult }: DashboardProps) => {
         </Box>
       )}
 
-      {/* Scatter Plot */}
-      <Paper sx={{ p: 3, mb: 3, borderRadius: 2 }}>
+      {/* Geographic Map */}
+      <Card sx={{ p: 3, mb: 3, borderRadius: 2 }}>
         <Box sx={{ mb: 2 }}>
           <Typography variant="h6" sx={{ fontWeight: 600, mb: 0.5 }}>
-            Site Distribution Map
+            Geospatial Density Distribution
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Geographic distribution of sites colored by area classification (Preview: {preview.length} sites)
+            Interactive map showing site locations colored by area classification (Preview: {preview.length} sites)
           </Typography>
         </Box>
-        <Box sx={{ width: '100%', height: 400 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <ScatterChart margin={{ top: 20, right: 20, bottom: 40, left: 40 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-              <XAxis
-                type="number"
-                dataKey="lon"
-                name="Longitude"
-                label={{ value: 'Longitude', position: 'insideBottom', offset: -5 }}
-                stroke="#666"
-              />
-              <YAxis
-                type="number"
-                dataKey="lat"
-                name="Latitude"
-                label={{ value: 'Latitude', angle: -90, position: 'insideLeft' }}
-                stroke="#666"
-              />
-              <Tooltip
-                cursor={{ strokeDasharray: '3 3' }}
-                contentStyle={{
-                  backgroundColor: '#ffffff',
-                  border: '1px solid #e0e0e0',
-                  borderRadius: '8px',
-                  padding: '12px',
-                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
-                }}
-                formatter={(value: any, name: string) => {
-                  if (name === 'density') {
-                    return [`${Number(value).toFixed(4)} sites/km²`, 'Density'];
-                  }
-                  if (name === 'lon') {
-                    return [Number(value).toFixed(6), 'Longitude'];
-                  }
-                  if (name === 'lat') {
-                    return [Number(value).toFixed(6), 'Latitude'];
-                  }
-                  return [value, name];
-                }}
-                labelFormatter={() => 'Site Details'}
-              />
-              <Legend
-                wrapperStyle={{ paddingTop: '20px' }}
-                formatter={(value) => {
-                  const colorMap: Record<string, string> = {
-                    Rural: COLORS.Rural,
-                    Suburban: COLORS.Suburban,
-                    Urban: COLORS.Urban,
-                    Dense: COLORS.Dense,
-                  };
-                  return (
-                    <span style={{ color: colorMap[value] || '#666' }}>
-                      {value}
-                    </span>
-                  );
-                }}
-              />
-              <Scatter name="Sites" data={scatterData} fill="#8884d8">
-                {scatterData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[entry.area_class as keyof typeof COLORS] || '#8884d8'} />
-                ))}
-              </Scatter>
-            </ScatterChart>
-          </ResponsiveContainer>
-        </Box>
-      </Paper>
+        {mapData.length > 0 ? (
+          <SiteMap sites={mapData} />
+        ) : (
+          <Box sx={{ height: 500, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Typography color="text.secondary">No valid geographic data to display</Typography>
+          </Box>
+        )}
+      </Card>
 
       {/* Data Table */}
       <Paper sx={{ p: 3, mb: 3, borderRadius: 2 }}>

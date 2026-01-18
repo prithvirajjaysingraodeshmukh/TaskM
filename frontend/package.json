@@ -17,7 +17,9 @@
     "@emotion/react": "^11.11.1",
     "@emotion/styled": "^11.11.0",
     "recharts": "^2.10.3",
-    "axios": "^1.6.2"
+    "axios": "^1.6.2",
+    "leaflet": "^1.9.4",
+    "react-leaflet": "^4.2.1"
   },
   "devDependencies": {
     "@types/react": "^18.2.43",
