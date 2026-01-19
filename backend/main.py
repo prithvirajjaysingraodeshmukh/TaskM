@@ -1,19 +1,21 @@
 """
 FastAPI application entry point.
-Service-layer architecture with clear separation of concerns.
+
+Thin API layer that handles HTTP requests, parameter parsing, and response formatting.
+All business logic is delegated to the pipeline module.
 """
 
 import logging
-from typing import Optional
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Query
+from typing import Optional, Dict
+from fastapi import FastAPI, File, UploadFile, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import Response
 import pandas as pd
 import io
 
-from schemas import AnalysisRequest, AnalysisResponse, AnalysisSummary
-from logic import process_sites
-from utils import dataframe_to_csv_bytes, dataframe_to_dict_list
+from backend.schemas import AnalysisResponse, AnalysisSummary
+from backend.pipeline import process_sites
+from backend.utils import dataframe_to_csv_bytes, dataframe_to_dict_list
 
 # Configure logging
 logging.basicConfig(
@@ -50,6 +52,56 @@ async def health():
     return {"status": "healthy"}
 
 
+def _parse_classification_thresholds(
+    classification_mode: str,
+    rural_threshold: Optional[float],
+    suburban_threshold: Optional[float],
+    urban_threshold: Optional[float]
+) -> Optional[Dict[str, float]]:
+    """
+    Parse classification thresholds from query parameters.
+    
+    Returns None if not in threshold mode or no thresholds provided.
+    """
+    if classification_mode != "threshold":
+        return None
+    
+    if rural_threshold is None and suburban_threshold is None and urban_threshold is None:
+        return None
+    
+    thresholds = {}
+    if rural_threshold is not None:
+        thresholds['rural'] = rural_threshold
+    if suburban_threshold is not None:
+        thresholds['suburban'] = suburban_threshold
+    if urban_threshold is not None:
+        thresholds['urban'] = urban_threshold
+    
+    return thresholds
+
+
+async def _read_csv_file(file: UploadFile) -> pd.DataFrame:
+    """
+    Read and parse CSV file from upload.
+    
+    Raises HTTPException on validation errors.
+    """
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="File must be a CSV file")
+    
+    contents = await file.read()
+    
+    try:
+        df = pd.read_csv(io.BytesIO(contents))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error reading CSV: {str(e)}")
+    
+    if len(df) == 0:
+        raise HTTPException(status_code=400, detail="CSV file is empty")
+    
+    return df
+
+
 @app.post("/analyze", response_model=AnalysisResponse)
 async def analyze_sites(
     file: UploadFile = File(..., description="CSV file with site data"),
@@ -69,35 +121,16 @@ async def analyze_sites(
         Analysis results with summary, preview, and download URL
     """
     try:
-        # Read uploaded file
-        if not file.filename.endswith('.csv'):
-            raise HTTPException(status_code=400, detail="File must be a CSV file")
-        
-        contents = await file.read()
-        
-        try:
-            df = pd.read_csv(io.BytesIO(contents))
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Error reading CSV: {str(e)}")
-        
-        if len(df) == 0:
-            raise HTTPException(status_code=400, detail="CSV file is empty")
-        
+        # Read and validate file
+        df = await _read_csv_file(file)
         logger.info(f"Processing {len(df)} rows from file: {file.filename}")
         
-        # Prepare classification thresholds if in threshold mode
-        classification_thresholds = None
-        if classification_mode == "threshold":
-            if rural_threshold is not None or suburban_threshold is not None or urban_threshold is not None:
-                classification_thresholds = {}
-                if rural_threshold is not None:
-                    classification_thresholds['rural'] = rural_threshold
-                if suburban_threshold is not None:
-                    classification_thresholds['suburban'] = suburban_threshold
-                if urban_threshold is not None:
-                    classification_thresholds['urban'] = urban_threshold
+        # Parse classification thresholds
+        classification_thresholds = _parse_classification_thresholds(
+            classification_mode, rural_threshold, suburban_threshold, urban_threshold
+        )
         
-        # Process sites using core logic
+        # Process sites using pipeline
         result_df, messages = process_sites(
             df=df,
             radius_km=radius_km,
@@ -125,7 +158,6 @@ async def analyze_sites(
         preview = dataframe_to_dict_list(result_df, max_rows=50)
         
         # Generate download URL (simulated - in production, this would be a real URL)
-        # For this implementation, client will call /download with same parameters
         download_url = "/download"
         
         return AnalysisResponse(
@@ -160,21 +192,13 @@ async def download_results(
     For this implementation, we reprocess the file with the same parameters.
     """
     try:
-        # Read uploaded file
-        contents = await file.read()
-        df = pd.read_csv(io.BytesIO(contents))
+        # Read and validate file
+        df = await _read_csv_file(file)
         
-        # Prepare classification thresholds
-        classification_thresholds = None
-        if classification_mode == "threshold":
-            if rural_threshold is not None or suburban_threshold is not None or urban_threshold is not None:
-                classification_thresholds = {}
-                if rural_threshold is not None:
-                    classification_thresholds['rural'] = rural_threshold
-                if suburban_threshold is not None:
-                    classification_thresholds['suburban'] = suburban_threshold
-                if urban_threshold is not None:
-                    classification_thresholds['urban'] = urban_threshold
+        # Parse classification thresholds
+        classification_thresholds = _parse_classification_thresholds(
+            classification_mode, rural_threshold, suburban_threshold, urban_threshold
+        )
         
         # Process sites
         result_df, _ = process_sites(
@@ -196,6 +220,8 @@ async def download_results(
             }
         )
     
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error generating download: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error generating download: {str(e)}")

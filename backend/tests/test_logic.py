@@ -6,15 +6,12 @@ Includes mandatory test with 3 synthetic points in a line.
 import pytest
 import pandas as pd
 import numpy as np
-from backend.logic import (
-    validate_csv,
-    haversine_distance,
-    calculate_density,
-    find_co_location_groups,
-    classify_sites,
-    process_sites,
-    EARTH_RADIUS_KM
-)
+from backend.validator import validate_csv
+from backend.spatial_index import haversine_distance, EARTH_RADIUS_KM
+from backend.neighbors import calculate_density
+from backend.colocation import find_co_location_groups
+from backend.classifier import classify_sites
+from backend.pipeline import process_sites
 
 
 class TestValidation:
@@ -160,7 +157,7 @@ class TestDensityCalculation:
                 f"Point {i} density mismatch: got {density.iloc[i]}, expected {expected_density}"
         
         # Verify neighbor counts by checking distances
-        from backend.logic import haversine_distance
+        from backend.spatial_index import haversine_distance
         for i in range(3):
             neighbors_within_radius = 0
             for j in range(3):

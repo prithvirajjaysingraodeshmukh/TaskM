@@ -9,11 +9,11 @@ services:
     ports:
       - "8000:8000"
     # testing will it work in any other system ----------------
- #   deploy:
- #     resources:
- #       limits:
- #         cpus: '1.0'   # Force it to use only 1 CPU core
- #         memory: 1024M # Force it to crash if it uses > 1GB RAM
+   # deploy:
+   #   resources:
+   #     limits:
+   #       cpus: '1.0'   # Force it to use only 1 CPU core
+   #       memory: 1024M # Force it to crash if it uses > 1GB RAM
     environment:
       - PYTHONUNBUFFERED=1
     networks:
