@@ -5,7 +5,7 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
-    container_name: site-analysis-backend
+    #container_name: site-analysis-backend
     ports:
       - "8000:8000"
     # testing will it work in any other system ----------------
@@ -23,7 +23,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: site-analysis-frontend
+    #container_name: site-analysis-frontend
     ports:
       - "8501:80"
     depends_on:
